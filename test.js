@@ -1,4 +1,4 @@
-import {Secp256k1, sha256} from "@cosmjs/crypto"
+import {Secp256k1, sha256, EnglishMnemonic, Bip39, Slip10, Slip10Curve, stringToPath} from "@cosmjs/crypto"
 import {encodeSecp256k1Signature} from "@cosmjs/amino"
 import {makeAuthInfoBytes, makeSignBytes, makeSignDoc, Registry} from "@cosmjs/proto-signing"
 import { Int53} from "@cosmjs/math"
@@ -9,19 +9,27 @@ import { coins } from '@cosmjs/stargate';
 import {
   MsgExecuteContract
 } from "cosmjs-types/cosmwasm/wasm/v1/tx.js";
+import {
+  MsgDelegate
+} from "cosmjs-types/cosmos/staking/v1beta1/tx.js"
 
+const mnemonic = "deputy cousin control dentist cost rich mention stomach rabbit amazing glove gain lend sign bronze mushroom task wedding captain add script wrestle repair camp"
+const hdPath = stringToPath("m/44'/118'/0'/0/0")
+const mnemonicChecked = new EnglishMnemonic(mnemonic)
+const seed = await Bip39.mnemonicToSeed(mnemonicChecked, "");
+const { privkey } = Slip10.derivePath(Slip10Curve.Secp256k1, seed, hdPath);
+let { pubkey } = await Secp256k1.makeKeypair(privkey);
+pubkey = Secp256k1.compressPubkey(pubkey)
 
-let pri = [228,173,7,156,156,223,107,188,171,92,234,85,6,10,74,127,24,139,50,92,6,197,121,52,184,97,134,71,243,88,76,51]
-let priBytes = Uint8Array.from(pri)
-let pub = "035730D5F16656EE837D3DADF3C9FE6DB9A97C4F13EB4E3C10973A523DBB39B18B"
-let pubBytes = Uint8Array.from(Buffer.from(pub, 'hex'))
+// privkey = f9b49d0f2454e1dcaadf412b3befd05373c984b1ca47502e755227da3068d69c
+// pubkey = 02765f7575402df21c363a6a8331ffe275ac4a93fb9793e20b2640b80590441533
 
 
 const sendMsg1 = {
     typeUrl: "/cosmos.bank.v1beta1.MsgSend",
     value: {
       fromAddress: "aura14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9swserkw",
-      toAddress: "aura19ecqv8ga40jrpsltetnafj7lazll0mwtk2q5h3",
+      toAddress: "aura15tf4rd958stktdsslts7cshs7pt3nhntslnsmc",
       amount: [{denom:"uaura",amount:"500"}],
     }
 }
@@ -30,10 +38,11 @@ const sendMsg2 = {
   typeUrl: "/cosmos.bank.v1beta1.MsgSend",
   value: {
     fromAddress: "aura14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9swserkw",
-    toAddress: "aura19ecqv8ga40jrpsltetnafj7lazll0mwtk2q5h3",
+    toAddress: "aura15tf4rd958stktdsslts7cshs7pt3nhntslnsmc",
     amount: [{denom:"uaura",amount:"400"}],
   }
 }
+
 
 
 const validateMsg = {
@@ -45,19 +54,17 @@ const validateMsg = {
       {pre_execute: 
         {
           messages: JSON.stringify([{
-            type: "bank",
-            sub_type: "send",
+            type: "MsgSend",
             data: JSON.stringify({
               from_address: "aura14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9swserkw",
-              to_address: "aura19ecqv8ga40jrpsltetnafj7lazll0mwtk2q5h3",
+              to_address: "aura15tf4rd958stktdsslts7cshs7pt3nhntslnsmc",
               amount: [{denom:"uaura",amount:"500"}] 
             })
           },{
-            type: "bank",
-            sub_type: "send",
+            type: "MsgSend",
             data: JSON.stringify({
               from_address: "aura14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9swserkw",
-              to_address: "aura19ecqv8ga40jrpsltetnafj7lazll0mwtk2q5h3",
+              to_address: "aura15tf4rd958stktdsslts7cshs7pt3nhntslnsmc",
               amount: [{denom:"uaura",amount:"400"}] 
             })
           }])
@@ -66,7 +73,6 @@ const validateMsg = {
     "funds": []
   }
 }
-
 
 const txBody = {
     typeUrl: "/cosmos.tx.v1beta1.TxBody",
@@ -78,6 +84,7 @@ const txBody = {
 
 const registry = new Registry()
 registry.register("/cosmwasm.wasm.v1.MsgExecuteContract", MsgExecuteContract)
+registry.register("/cosmos.staking.v1beta1.MsgDelegate", MsgDelegate)
 
 const sequence = 0
 const txBodyBytes = registry.encode(txBody)
@@ -95,9 +102,9 @@ const signDoc = makeSignDoc(txBodyBytes, authInfoBytes, "aura-testnet", 10)
 
 const signBytes = makeSignBytes(signDoc)
 const hashedMessage = sha256(signBytes)
-const signature = await Secp256k1.createSignature(hashedMessage, priBytes)
+const signature = await Secp256k1.createSignature(hashedMessage, privkey)
 const signatureBytes = new Uint8Array([...signature.r(32), ...signature.s(32)])
-const stdSignature = encodeSecp256k1Signature(pubBytes, signatureBytes)
+const stdSignature = encodeSecp256k1Signature(pubkey, signatureBytes)
 
 let signed = TxRaw.fromPartial({
     bodyBytes: signDoc.bodyBytes,
